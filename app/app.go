@@ -2,10 +2,10 @@ package app
 
 import (
 	"log"
-	"os/exec"
 
 	"github.com/kwakubiney/safehaven/client"
 	"github.com/kwakubiney/safehaven/config"
+	"github.com/vishvananda/netlink"
 )
 
 type App struct {
@@ -39,21 +39,19 @@ func (app *App) StartVPNClient() error {
 	}
 }
 
-func (app *App) AssignIPToTun() error {
-	log.Printf("ip address add %s dev %s", app.Config.ClientTunIP, app.Config.ClientTunName)
-	assignIPtoTunCommand := exec.Command("ip", "address", "add", app.Config.ClientTunIP, "dev", app.Config.ClientTunName)
-	ipToTunCommandResp, err := assignIPtoTunCommand.Output()
-	if err != nil {
-		return err
-	}
-	log.Println(ipToTunCommandResp)
 
-	log.Printf("ip link set dev %s up", app.Config.ClientTunName)
-	tunUpCommand := exec.Command("ip", "link", "set", "dev", app.Config.ClientTunName, "up")
-	tunUpCommandResp, err := tunUpCommand.Output()
+func (app *App) AssignIPToTun() error {
+	tunLink, err := netlink.LinkByName(app.Config.ClientTunName)
 	if err != nil {
 		return err
 	}
-	log.Println((tunUpCommandResp))
+
+	parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
+	if err != nil{
+		return err
+	}
+
+	netlink.AddrAdd(tunLink, parsedTunIPAddress)
+
 	return nil
 }

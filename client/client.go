@@ -1,7 +1,6 @@
 package client
 
 import (
-
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/songgao/water"
 )

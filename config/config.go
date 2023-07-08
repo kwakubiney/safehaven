@@ -5,5 +5,5 @@ type Config struct {
 	ServerAddress string
 	ServerPort    string
 	ClientTunName string
-	LocalAddress string
+	LocalAddress  string
 }
