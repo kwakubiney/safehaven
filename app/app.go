@@ -6,6 +6,7 @@ import (
 
 	"github.com/kwakubiney/safehaven/client"
 	"github.com/kwakubiney/safehaven/config"
+	"github.com/vishvananda/netlink"
 )
 
 type App struct {
@@ -40,20 +41,45 @@ func (app *App) StartVPNClient() error {
 }
 
 func (app *App) AssignIPToTun() error {
-	log.Printf("ip address add %s dev %s", app.Config.ClientTunIP, app.Config.ClientTunName)
-	assignIPtoTunCommand := exec.Command("ip", "address", "add", app.Config.ClientTunIP, "dev", app.Config.ClientTunName)
-	ipToTunCommandResp, err := assignIPtoTunCommand.Output()
+	tunLink, err := netlink.LinkByName(app.Config.ClientTunName)
 	if err != nil {
 		return err
 	}
-	log.Println(ipToTunCommandResp)
 
-	log.Printf("ip link set dev %s up", app.Config.ClientTunName)
-	tunUpCommand := exec.Command("ip", "link", "set", "dev", app.Config.ClientTunName, "up")
-	tunUpCommandResp, err := tunUpCommand.Output()
+	parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
 	if err != nil {
 		return err
 	}
-	log.Println((tunUpCommandResp))
+
+	err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+	if err != nil {
+		return err
+	}
+
+	err = netlink.LinkSetUp(tunLink)
+	if err != nil {
+		return err
+	}
+
+	/*
+		I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
+		override the default route without modifying or removing the existing one
+		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
+		& answer https://serverfault.com/a/1100354
+	*/
+
+	//TODO: Figure out how to use netlink to achieve this
+	routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
+	_, err = routeFirstHalfOfAllDestToTun.Output()
+	if err != nil {
+		return err
+	}
+
+	routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
+	_, err = routeSecondHalfOfAllDestToTun.Output()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
