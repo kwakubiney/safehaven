@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"net"
 	"os/exec"
 
 	"github.com/kwakubiney/safehaven/client"
@@ -31,13 +32,25 @@ func (app *App) StartVPNClient() error {
 	}
 
 	packet := make([]byte, 1500)
+	clientConn, err := net.Dial("udp", app.Config.ServerAddress+":3000")
+	if err != nil {
+		return err
+	}
+	defer clientConn.Close()
 	for {
 		n, err := vpnClient.TunInterface.Read(packet)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			break
 		}
-		log.Printf("Packet Received On %s Interface: % x\n", app.Config.ClientTunName, packet[:n])
+
+		_, err = clientConn.Write(packet[:n])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 	}
+	return nil
 }
 
 func (app *App) AssignIPToTun() error {
@@ -61,24 +74,31 @@ func (app *App) AssignIPToTun() error {
 		return err
 	}
 
-	/*
+	/*	NB: The global path is supposed to route ALL traffic to TUN
+
 		I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
 		override the default route without modifying or removing the existing one
 		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
 		& answer https://serverfault.com/a/1100354
 	*/
+	if app.Config.Global {
+		routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
+		_, err = routeFirstHalfOfAllDestToTun.Output()
+		if err != nil {
+			return err
+		}
 
-	//TODO: Figure out how to use netlink to achieve this
-	routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
-	_, err = routeFirstHalfOfAllDestToTun.Output()
-	if err != nil {
-		return err
-	}
-
-	routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
-	_, err = routeSecondHalfOfAllDestToTun.Output()
-	if err != nil {
-		return err
+		routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
+		_, err = routeSecondHalfOfAllDestToTun.Output()
+		if err != nil {
+			return err
+		}
+	} else {
+		routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.ClientTunName)
+		_, err = routeTrafficToDestinationThroughTun.Output()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
