@@ -127,7 +127,6 @@ func (app *App) StartVPNServer() error {
 	for {
 		packet := make([]byte, 1500)
 		n, _, err := serverConn.ReadFrom(packet)
-		log.Println(string(packet))
 		if err != nil{
 			log.Println(err)
 			continue
