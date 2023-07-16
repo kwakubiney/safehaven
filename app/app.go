@@ -8,6 +8,8 @@ import (
 	"github.com/kwakubiney/safehaven/client"
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/kwakubiney/safehaven/server"
+	"github.com/kwakubiney/safehaven/utils"
+	"github.com/orcaman/concurrent-map/v2"
 	"github.com/vishvananda/netlink"
 )
 
@@ -130,6 +132,7 @@ func (app *App) StartVPNServer() error {
 	if err != nil {
 		return err
 	}
+	vpnServer.ConnMap = cmap.New[net.Addr]()
 	err = app.AssignIPToTun()
 	if err != nil {
 		return err
@@ -139,16 +142,20 @@ func (app *App) StartVPNServer() error {
 	if err != nil {
 		return err
 	}
+	vpnServer.UDPConn = serverConn
 
 	defer serverConn.Close()
 	go func() {
 		for {
 			packet := make([]byte, 1500)
-			n, _, err := serverConn.ReadFrom(packet)
+
+			n, clientAddr, err := serverConn.ReadFrom(packet)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			sourceIPAddress := utils.ResolveSourceIPAddressFromRawPacket(packet)
+			vpnServer.ConnMap.Set(sourceIPAddress, clientAddr)
 			_, err = vpnServer.TunInterface.Write(packet[:n])
 			if err != nil {
 				log.Println(err)
@@ -164,11 +171,14 @@ func (app *App) StartVPNServer() error {
 			log.Println(err)
 			break
 		}
-
-		_, err = serverConn.Write(packet[:n])
-		if err != nil {
+		destinationIPAddress := utils.ResolveDestinationIPAddressFromRawPacket(packet)
+		destinationUDPAddress, ok := vpnServer.ConnMap.Get(destinationIPAddress)
+		if ok{
+			_, err = serverConn.WriteToUDP(packet[:n], destinationUDPAddress.(*net.UDPAddr))
+			if err != nil {
 			log.Println(err)
 			continue
+		}
 		}
 	}
 
