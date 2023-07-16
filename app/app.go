@@ -161,6 +161,7 @@ func (app *App) StartVPNServer() error {
 			sourceIPAddress := utils.ResolveSourceIPAddressFromRawPacket(packet)
 			log.Println("sourceIPAddress:", sourceIPAddress)
 			vpnServer.ConnMap.Set(sourceIPAddress, clientAddr)
+			log.Println("conn map:", vpnServer.ConnMap)
 			_, err = vpnServer.TunInterface.Write(packet[:n])
 			if err != nil {
 				log.Println(err)
@@ -177,6 +178,7 @@ func (app *App) StartVPNServer() error {
 			break
 		}
 		destinationIPAddress := utils.ResolveDestinationIPAddressFromRawPacket(packet)
+		log.Println("connection cache:", vpnServer.ConnMap)
 		destinationUDPAddress, ok := vpnServer.ConnMap.Get(destinationIPAddress)
 		log.Println("sending back to client at address:", destinationIPAddress, destinationUDPAddress)
 		if ok{
@@ -185,6 +187,7 @@ func (app *App) StartVPNServer() error {
 			log.Println(err)
 			continue
 		}
+			vpnServer.ConnMap.Remove(destinationIPAddress)
 		}
 	}
 
