@@ -1,28 +1,28 @@
-package client
+package server
 
 import (
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/songgao/water"
 )
 
-type Client struct {
+type Server struct {
 	Config       *config.Config
 	TunInterface *water.Interface
 }
 
-func NewClient(config *config.Config) *Client {
-	return &Client{
+func NewServer(config *config.Config) *Server {
+	return &Server{
 		Config: config,
 	}
 }
 
-func (client *Client) SetTunOnDevice() error {
+func (server *Server) SetTunOnDevice() error {
 	ifce, err := water.New(water.Config{DeviceType: water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{Name: client.Config.ClientTunName},
+		PlatformSpecificParams: water.PlatformSpecificParams{Name: server.Config.ClientTunName},
 	})
 	if err != nil {
 		return err
 	}
-	client.TunInterface = ifce
+	server.TunInterface = ifce
 	return nil
 }

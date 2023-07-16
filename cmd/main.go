@@ -16,7 +16,7 @@ func main() {
 	flag.StringVar(&config.ClientTunName, "tname", "tun0", "tunname")
 	flag.BoolVar(&config.Global, "g", false, "global")
 	flag.StringVar(&config.DestinationAddress, "d", "10.108.0.2", "destination")
-	flag.BoolVar(&config.ServerMode, "d", false, "server mode")
+	flag.BoolVar(&config.ServerMode, "srv", false, "server mode")
 
 	flag.Parse()
 
@@ -28,6 +28,9 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		//start vpn server
+		err := app.StartVPNServer()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

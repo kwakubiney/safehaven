@@ -7,6 +7,7 @@ import (
 
 	"github.com/kwakubiney/safehaven/client"
 	"github.com/kwakubiney/safehaven/config"
+	"github.com/kwakubiney/safehaven/server"
 	"github.com/vishvananda/netlink"
 )
 
@@ -22,7 +23,7 @@ func NewApp(config *config.Config) App {
 
 func (app *App) StartVPNClient() error {
 	vpnClient := client.NewClient(app.Config)
-	err := vpnClient.SetTunOnClient()
+	err := vpnClient.SetTunOnDevice()
 	if err != nil {
 		return err
 	}
@@ -33,6 +34,7 @@ func (app *App) StartVPNClient() error {
 
 	packet := make([]byte, 1500)
 	clientConn, err := net.Dial("udp", app.Config.ServerAddress+":3000")
+
 	if err != nil {
 		return err
 	}
@@ -102,4 +104,36 @@ func (app *App) AssignIPToTun() error {
 	}
 
 	return nil
+}
+
+func (app *App) StartVPNServer() error {
+	vpnServer := server.NewServer(app.Config)
+	err := vpnServer.SetTunOnDevice()
+	if err != nil {
+		return err
+	}
+	err = app.AssignIPToTun()
+	if err != nil {
+		return err
+	}
+
+	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 3000})
+	if err != nil {
+		return err
+	}
+
+	defer serverConn.Close()
+	for {
+		packet := make([]byte, 1500)
+		n, _, err := serverConn.ReadFrom(packet)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		_, err = vpnServer.TunInterface.Write(packet[:n])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+	}
 }
