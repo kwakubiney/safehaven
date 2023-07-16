@@ -43,12 +43,14 @@ func (app *App) StartVPNClient() error {
 	defer clientConn.Close()
 	for {
 		n, err := vpnClient.TunInterface.Read(packet)
+		log.Println("from tun:", packet)
 		if err != nil {
 			log.Println(err)
 			break
 		}
 
-		_, err = clientConn.Write(packet[:n])
+		n, err = clientConn.Write(packet[:n])
+		log.Println("written to udp:", n)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -150,11 +152,14 @@ func (app *App) StartVPNServer() error {
 			packet := make([]byte, 1500)
 
 			n, clientAddr, err := serverConn.ReadFrom(packet)
+			log.Println("clientAddr:", clientAddr)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
+			log.Println("packet from udp client:", packet[:n])
 			sourceIPAddress := utils.ResolveSourceIPAddressFromRawPacket(packet)
+			log.Println("sourceIPAddress:", sourceIPAddress)
 			vpnServer.ConnMap.Set(sourceIPAddress, clientAddr)
 			_, err = vpnServer.TunInterface.Write(packet[:n])
 			if err != nil {
@@ -173,6 +178,7 @@ func (app *App) StartVPNServer() error {
 		}
 		destinationIPAddress := utils.ResolveDestinationIPAddressFromRawPacket(packet)
 		destinationUDPAddress, ok := vpnServer.ConnMap.Get(destinationIPAddress)
+		log.Println("sending back to client at address:", destinationIPAddress, destinationUDPAddress)
 		if ok{
 			_, err = serverConn.WriteToUDP(packet[:n], destinationUDPAddress.(*net.UDPAddr))
 			if err != nil {
