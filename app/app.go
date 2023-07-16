@@ -52,6 +52,22 @@ func (app *App) StartVPNClient() error {
 			continue
 		}
 	}
+	go func() {
+		for {
+			packet := make([]byte, 1500)
+			n, err := clientConn.Read(packet)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			_, err = vpnClient.TunInterface.Write(packet[:n])
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -83,23 +99,25 @@ func (app *App) AssignIPToTun() error {
 		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
 		& answer https://serverfault.com/a/1100354
 	*/
-	if app.Config.Global {
-		routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
-		_, err = routeFirstHalfOfAllDestToTun.Output()
-		if err != nil {
-			return err
-		}
+	if !app.Config.ServerMode {
+		if app.Config.Global {
+			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
+			_, err = routeFirstHalfOfAllDestToTun.Output()
+			if err != nil {
+				return err
+			}
 
-		routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
-		_, err = routeSecondHalfOfAllDestToTun.Output()
-		if err != nil {
-			return err
-		}
-	} else {
-		routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.ClientTunName)
-		_, err = routeTrafficToDestinationThroughTun.Output()
-		if err != nil {
-			return err
+			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
+			_, err = routeSecondHalfOfAllDestToTun.Output()
+			if err != nil {
+				return err
+			}
+		} else {
+			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.ClientTunName)
+			_, err = routeTrafficToDestinationThroughTun.Output()
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -123,17 +141,36 @@ func (app *App) StartVPNServer() error {
 	}
 
 	defer serverConn.Close()
+	go func() {
+		for {
+			packet := make([]byte, 1500)
+			n, _, err := serverConn.ReadFrom(packet)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			_, err = vpnServer.TunInterface.Write(packet[:n])
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+		}
+	}()
+
 	for {
 		packet := make([]byte, 1500)
-		n, _, err := serverConn.ReadFrom(packet)
+		n, err := vpnServer.TunInterface.Read(packet)
 		if err != nil {
 			log.Println(err)
-			continue
+			break
 		}
-		_, err = vpnServer.TunInterface.Write(packet[:n])
+
+		_, err = serverConn.Write(packet[:n])
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 	}
+
+	return nil
 }
