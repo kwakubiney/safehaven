@@ -34,7 +34,7 @@ func (app *App) StartVPNClient() error {
 
 	packet := make([]byte, 1500)
 	clientConn, err := net.Dial("udp", app.Config.ServerAddress+":3000")
-	
+
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,6 @@ func (app *App) AssignIPToTun() error {
 	return nil
 }
 
-
 func (app *App) StartVPNServer() error {
 	vpnServer := server.NewServer(app.Config)
 	err := vpnServer.SetTunOnDevice()
@@ -127,11 +126,11 @@ func (app *App) StartVPNServer() error {
 	for {
 		packet := make([]byte, 1500)
 		n, _, err := serverConn.ReadFrom(packet)
-		if err != nil{
+		if err != nil {
 			log.Println(err)
 			continue
 		}
-		_ , err = vpnServer.TunInterface.Write(packet[:n])
+		_, err = vpnServer.TunInterface.Write(packet[:n])
 		if err != nil {
 			log.Println(err)
 			continue

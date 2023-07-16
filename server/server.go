@@ -5,12 +5,12 @@ import (
 	"github.com/songgao/water"
 )
 
-type Server struct{
-	Config *config.Config
+type Server struct {
+	Config       *config.Config
 	TunInterface *water.Interface
 }
 
-func NewServer(config *config.Config) *Server{
+func NewServer(config *config.Config) *Server {
 	return &Server{
 		Config: config,
 	}

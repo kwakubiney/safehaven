@@ -29,7 +29,7 @@ func main() {
 		}
 	} else {
 		err := app.StartVPNServer()
-		if err != nil{
+		if err != nil {
 			log.Fatal(err)
 		}
 	}
