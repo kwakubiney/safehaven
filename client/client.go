@@ -16,7 +16,7 @@ func NewClient(config *config.Config) *Client {
 	}
 }
 
-func (client *Client) SetTunOnClient() error {
+func (client *Client) SetTunOnDevice() error {
 	ifce, err := water.New(water.Config{DeviceType: water.TUN,
 		PlatformSpecificParams: water.PlatformSpecificParams{Name: client.Config.ClientTunName},
 	})
