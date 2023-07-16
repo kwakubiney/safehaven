@@ -41,21 +41,6 @@ func (app *App) StartVPNClient() error {
 		return err
 	}
 	defer clientConn.Close()
-	for {
-		n, err := vpnClient.TunInterface.Read(packet)
-		log.Println("from tun:", packet)
-		if err != nil {
-			log.Println(err)
-			break
-		}
-
-		n, err = clientConn.Write(packet[:n])
-		log.Println("written to udp:", n)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-	}
 	go func() {
 		for {
 			packet := make([]byte, 1500)
@@ -71,30 +56,23 @@ func (app *App) StartVPNClient() error {
 			}
 		}
 	}()
+	for {
+		n, err := vpnClient.TunInterface.Read(packet)
+		if err != nil {
+			log.Println(err)
+			break
+		}
 
+		n, err = clientConn.Write(packet[:n])
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+	}
 	return nil
 }
 
 func (app *App) AssignIPToTun() error {
-	tunLink, err := netlink.LinkByName(app.Config.ClientTunName)
-	if err != nil {
-		return err
-	}
-
-	parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
-	if err != nil {
-		return err
-	}
-
-	err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
-	if err != nil {
-		return err
-	}
-
-	err = netlink.LinkSetUp(tunLink)
-	if err != nil {
-		return err
-	}
 
 	/*	NB: The global path is supposed to route ALL traffic to TUN
 
@@ -104,24 +82,71 @@ func (app *App) AssignIPToTun() error {
 		& answer https://serverfault.com/a/1100354
 	*/
 	if !app.Config.ServerMode {
+		tunLink, err := netlink.LinkByName(app.Config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+
 		if app.Config.Global {
-			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.ClientTunName)
+			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
 			_, err = routeFirstHalfOfAllDestToTun.Output()
 			if err != nil {
 				return err
 			}
 
-			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.ClientTunName)
+			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
 			_, err = routeSecondHalfOfAllDestToTun.Output()
 			if err != nil {
 				return err
 			}
 		} else {
-			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.ClientTunName)
+			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
 			_, err = routeTrafficToDestinationThroughTun.Output()
 			if err != nil {
 				return err
 			}
+		}
+	} else {
+		tunLink, err := netlink.LinkByName(app.Config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ServerTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+		routeReplyBackToClient := exec.Command("ip", "route", "add",
+			utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/"),
+			"dev", app.Config.TunName)
+		_, err = routeReplyBackToClient.Output()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -152,16 +177,12 @@ func (app *App) StartVPNServer() error {
 			packet := make([]byte, 1500)
 
 			n, clientAddr, err := serverConn.ReadFrom(packet)
-			log.Println("clientAddr:", clientAddr)
 			if err != nil {
 				log.Println(err)
 				continue
 			}
-			log.Println("packet from udp client:", packet[:n])
 			sourceIPAddress := utils.ResolveSourceIPAddressFromRawPacket(packet)
-			log.Println("sourceIPAddress:", sourceIPAddress)
 			vpnServer.ConnMap.Set(sourceIPAddress, clientAddr)
-			log.Println("conn map:", vpnServer.ConnMap)
 			_, err = vpnServer.TunInterface.Write(packet[:n])
 			if err != nil {
 				log.Println(err)
@@ -178,15 +199,13 @@ func (app *App) StartVPNServer() error {
 			break
 		}
 		destinationIPAddress := utils.ResolveDestinationIPAddressFromRawPacket(packet)
-		log.Println("connection cache:", vpnServer.ConnMap)
 		destinationUDPAddress, ok := vpnServer.ConnMap.Get(destinationIPAddress)
-		log.Println("sending back to client at address:", destinationIPAddress, destinationUDPAddress)
-		if ok{
+		if ok {
 			_, err = serverConn.WriteToUDP(packet[:n], destinationUDPAddress.(*net.UDPAddr))
 			if err != nil {
-			log.Println(err)
-			continue
-		}
+				log.Println(err)
+				continue
+			}
 			vpnServer.ConnMap.Remove(destinationIPAddress)
 		}
 	}

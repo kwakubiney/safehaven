@@ -23,7 +23,7 @@ func NewServer(config *config.Config) *Server {
 
 func (server *Server) SetTunOnDevice() error {
 	ifce, err := water.New(water.Config{DeviceType: water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{Name: server.Config.ClientTunName},
+		PlatformSpecificParams: water.PlatformSpecificParams{Name: server.Config.TunName},
 	})
 	if err != nil {
 		return err
