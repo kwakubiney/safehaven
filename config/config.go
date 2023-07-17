@@ -8,7 +8,6 @@ type Config struct {
 	ServerTunIP        string
 	LocalAddress       string
 	DestinationAddress string
-	//this to denote routing all traffic
-	Global     bool
-	ServerMode bool
+	Global             bool
+	ServerMode         bool
 }

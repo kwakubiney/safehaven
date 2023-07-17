@@ -11,7 +11,6 @@ import (
 type Server struct {
 	Config       *config.Config
 	TunInterface *water.Interface
-	UDPConn      *net.UDPConn
 	ConnMap      cmap.ConcurrentMap[string, net.Addr]
 }
 
