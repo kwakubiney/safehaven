@@ -12,11 +12,11 @@ func main() {
 	var config config.Config
 	flag.StringVar(&config.ClientTunIP, "tc", "192.168.1.100/24", "client tun device ip")
 	flag.StringVar(&config.ServerTunIP, "ts", "192.168.1.102/24", "server tun device ip")
-	flag.StringVar(&config.ServerAddress, "s", "138.197.32.138", "server address")
-	flag.StringVar(&config.LocalAddress, "l", "", "local address")
-	flag.StringVar(&config.TunName, "tname", "tun0", "tunname")
+	flag.StringVar(&config.ServerAddress, "s", "138.197.32.138:3000", "server address")
+	flag.StringVar(&config.LocalAddress, "l", "3000", "local address")
+	flag.StringVar(&config.TunName, "tname", "tun0", "tun interface name")
 	flag.BoolVar(&config.Global, "g", false, "global")
-	flag.StringVar(&config.DestinationAddress, "d", "10.108.0.2", "destination")
+	flag.StringVar(&config.DestinationAddress, "d", "10.108.0.2", "destination host/network address")
 	flag.BoolVar(&config.ServerMode, "srv", false, "server mode")
 
 	flag.Parse()

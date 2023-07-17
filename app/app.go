@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"os/exec"
+	"strconv"
 
 	"github.com/kwakubiney/safehaven/client"
 	"github.com/kwakubiney/safehaven/config"
@@ -34,8 +35,13 @@ func (app *App) StartVPNClient() error {
 		return err
 	}
 
+	err = app.CreateRoutes()
+	if err != nil {
+		return err
+	}
+
 	packet := make([]byte, 1500)
-	clientConn, err := net.Dial("udp", app.Config.ServerAddress+":3000")
+	clientConn, err := net.Dial("udp", app.Config.ServerAddress)
 
 	if err != nil {
 		return err
@@ -63,93 +69,12 @@ func (app *App) StartVPNClient() error {
 			break
 		}
 
-		n, err = clientConn.Write(packet[:n])
+		_, err = clientConn.Write(packet[:n])
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 	}
-	return nil
-}
-
-func (app *App) AssignIPToTun() error {
-
-	/*	NB: The global path is supposed to route ALL traffic to TUN
-
-		I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
-		override the default route without modifying or removing the existing one
-		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
-		& answer https://serverfault.com/a/1100354
-	*/
-	if !app.Config.ServerMode {
-		tunLink, err := netlink.LinkByName(app.Config.TunName)
-		if err != nil {
-			return err
-		}
-
-		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
-		if err != nil {
-			return err
-		}
-
-		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
-		if err != nil {
-			return err
-		}
-
-		err = netlink.LinkSetUp(tunLink)
-		if err != nil {
-			return err
-		}
-
-		if app.Config.Global {
-			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
-			_, err = routeFirstHalfOfAllDestToTun.Output()
-			if err != nil {
-				return err
-			}
-
-			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
-			_, err = routeSecondHalfOfAllDestToTun.Output()
-			if err != nil {
-				return err
-			}
-		} else {
-			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
-			_, err = routeTrafficToDestinationThroughTun.Output()
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		tunLink, err := netlink.LinkByName(app.Config.TunName)
-		if err != nil {
-			return err
-		}
-
-		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ServerTunIP)
-		if err != nil {
-			return err
-		}
-
-		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
-		if err != nil {
-			return err
-		}
-
-		err = netlink.LinkSetUp(tunLink)
-		if err != nil {
-			return err
-		}
-		routeReplyBackToClient := exec.Command("ip", "route", "add",
-			utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/"),
-			"dev", app.Config.TunName)
-		_, err = routeReplyBackToClient.Output()
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -165,12 +90,16 @@ func (app *App) StartVPNServer() error {
 		return err
 	}
 
-	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 3000})
+	err = app.CreateRoutes()
 	if err != nil {
 		return err
 	}
-	vpnServer.UDPConn = serverConn
 
+	localAddress, _ := strconv.Atoi(app.Config.LocalAddress)
+	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: localAddress})
+	if err != nil {
+		return err
+	}
 	defer serverConn.Close()
 	go func() {
 		for {
@@ -209,6 +138,89 @@ func (app *App) StartVPNServer() error {
 			vpnServer.ConnMap.Remove(destinationIPAddress)
 		}
 	}
+	return nil
+}
 
+func (app *App) AssignIPToTun() error {
+	if !app.Config.ServerMode {
+		tunLink, err := netlink.LinkByName(app.Config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+	} else {
+		tunLink, err := netlink.LinkByName(app.Config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ServerTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+/*	NB: The global path is supposed to route ALL traffic to TUN
+		I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
+		override the default route without modifying or removing the existing one
+		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
+		& answer https://serverfault.com/a/1100354
+	*/
+func (app *App) CreateRoutes() error {
+	if !app.Config.ServerMode {
+		if app.Config.Global {
+			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
+			_, err := routeFirstHalfOfAllDestToTun.Output()
+			if err != nil {
+				return err
+			}
+
+			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
+			_, err = routeSecondHalfOfAllDestToTun.Output()
+			if err != nil {
+				return err
+			}
+		} else {
+			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
+			_, err := routeTrafficToDestinationThroughTun.Output()
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		routeReplyBackToClient := exec.Command("ip", "route", "add",
+			utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/"),
+			"dev", app.Config.TunName)
+		_, err := routeReplyBackToClient.Output()
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
