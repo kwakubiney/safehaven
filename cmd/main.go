@@ -2,7 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/kwakubiney/safehaven/app"
 	"github.com/kwakubiney/safehaven/config"
@@ -22,6 +26,15 @@ func main() {
 	flag.Parse()
 
 	app := app.NewApp(&config)
+
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-interruptChan
+		fmt.Println("\nShutting down gracefully...")
+		os.Exit(0)
+	}()
 
 	if !config.ServerMode {
 		err := app.StartVPNClient()

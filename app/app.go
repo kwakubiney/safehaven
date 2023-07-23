@@ -186,12 +186,14 @@ func (app *App) AssignIPToTun() error {
 	return nil
 }
 
-/*	NB: The global path is supposed to route ALL traffic to TUN
-		I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
-		override the default route without modifying or removing the existing one
-		See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
-		& answer https://serverfault.com/a/1100354
-	*/
+/*
+NB: The global path is supposed to route ALL traffic to TUN
+
+	I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
+	override the default route without modifying or removing the existing one
+	See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
+	& answer https://serverfault.com/a/1100354
+*/
 func (app *App) CreateRoutes() error {
 	if !app.Config.ServerMode {
 		if app.Config.Global {
