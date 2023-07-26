@@ -197,26 +197,26 @@ NB: The global path is supposed to route ALL traffic to TUN
 func (app *App) CreateRoutes() error {
 	if !app.Config.ServerMode {
 		if app.Config.Global {
-			routeFirstHalfOfAllDestToTun := exec.Command("ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
+			routeFirstHalfOfAllDestToTun := exec.Command("sudo", "ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
 			_, err := routeFirstHalfOfAllDestToTun.Output()
 			if err != nil {
 				return err
 			}
 
-			routeSecondHalfOfAllDestToTun := exec.Command("ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
+			routeSecondHalfOfAllDestToTun := exec.Command("sudo", "ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
 			_, err = routeSecondHalfOfAllDestToTun.Output()
 			if err != nil {
 				return err
 			}
 		} else {
-			routeTrafficToDestinationThroughTun := exec.Command("ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
+			routeTrafficToDestinationThroughTun := exec.Command("sudo", "ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
 			_, err := routeTrafficToDestinationThroughTun.Output()
 			if err != nil {
 				return err
 			}
 		}
 	} else {
-		routeReplyBackToClient := exec.Command("ip", "route", "add",
+		routeReplyBackToClient := exec.Command("sudo", "ip", "route", "add",
 			utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/"),
 			"dev", app.Config.TunName)
 		_, err := routeReplyBackToClient.Output()
