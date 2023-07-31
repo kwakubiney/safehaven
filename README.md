@@ -3,19 +3,8 @@
 * Architecture
   ![architecture](https://github.com/kwakubiney/safehaven/assets/71296367/7a637a3f-337d-4e44-a793-4aa01049d191)
 
-## Problem
-1) I have two machines on Digital Ocean, and they exist on two different `VPC`, hence two different private networks.
-2) Private networks are not routable on the internet.
-3) `Droplet 1` cannot communicate with `Droplet 2`'s private network over the internet.
-4) We want to create our own tunnel to route traffic to `Droplet 2`'s private network from `Droplet 1` :)
-
-## Solution (A tunnel application)
-
-1) The client of `safehaven` is responsible for encapsulating outgoing network traffic from the local network. It leverages the `TUN` interface to create a virtual network interface that behaves like a regular network device and routes all traffic to the destination private address through the `TUN` interface.
-
-2) Once the traffic is redirected, the client encapsulates the packets into `UDP` datagrams, which act as the transport protocol for transmitting the data across the public Internet.
-
-3) The tunnel server listens on a designated port, waiting for the client to establish a connection. Upon receiving the `UDP` datagram, the server extracts the encapsulated packets and forwards them to the appropriate destination within the private network.
+## How does it work
+Checkout my blog [post](https://kwakubiney.github.io/posts/UDP-Tunneling-With-Safehaven/) for implementation details.
 
 ## Demo
 [Click here to watch demo](https://www.youtube.com/watch?v=BJcXyx5ae1Ac)
