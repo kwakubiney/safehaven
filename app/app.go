@@ -40,16 +40,18 @@ func (app *App) StartVPNClient() error {
 		return err
 	}
 
-	packet := make([]byte, 1500)
+	packet := make([]byte, 65535)
 	clientConn, err := net.Dial("udp", app.Config.ServerAddress)
 
 	if err != nil {
 		return err
 	}
 	defer clientConn.Close()
+
+	//receive
 	go func() {
 		for {
-			packet := make([]byte, 1500)
+			packet := make([]byte, 65535)
 			n, err := clientConn.Read(packet)
 			if err != nil {
 				log.Println(err)
@@ -62,6 +64,8 @@ func (app *App) StartVPNClient() error {
 			}
 		}
 	}()
+
+	//send
 	for {
 		n, err := vpnClient.TunInterface.Read(packet)
 		if err != nil {
@@ -103,7 +107,7 @@ func (app *App) StartVPNServer() error {
 	defer serverConn.Close()
 	go func() {
 		for {
-			packet := make([]byte, 1500)
+			packet := make([]byte, 65535)
 
 			n, clientAddr, err := serverConn.ReadFrom(packet)
 			if err != nil {
