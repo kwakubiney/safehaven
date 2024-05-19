@@ -47,6 +47,7 @@ func (app *App) StartVPNClient() error {
 		return err
 	}
 	defer clientConn.Close()
+	defer vpnClient.TunInterface.Close()
 
 	//receive
 	go func() {
@@ -105,6 +106,7 @@ func (app *App) StartVPNServer() error {
 		return err
 	}
 	defer serverConn.Close()
+	defer vpnServer.TunInterface.Close()
 	go func() {
 		for {
 			packet := make([]byte, 65535)
