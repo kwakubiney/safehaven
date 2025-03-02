@@ -1,9 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"strconv"
 
 	"github.com/kwakubiney/safehaven/client"
@@ -192,43 +192,60 @@ func (app *App) AssignIPToTun() error {
 	return nil
 }
 
-/*
-NB: The global path is supposed to route ALL traffic to TUN
-
-	I use 0.0.0.0/1 and 128.0.0.0/1 as destination addresses specifically because I want to
-	override the default route without modifying or removing the existing one
-	See: https://serverfault.com/questions/1100250/what-is-the-difference-between-0-0-0-0-0-and-0-0-0-0-1
-	& answer https://serverfault.com/a/1100354
-*/
 func (app *App) CreateRoutes() error {
+	// Get the TUN interface by name
+	link, err := netlink.LinkByName(app.Config.TunName)
+	if err != nil {
+		return fmt.Errorf("failed to get TUN interface %s: %w", app.Config.TunName, err)
+	}
+
 	if !app.Config.ServerMode {
 		if app.Config.Global {
-			routeFirstHalfOfAllDestToTun := exec.Command("sudo", "ip", "route", "add", "0.0.0.0/1", "dev", app.Config.TunName)
-			_, err := routeFirstHalfOfAllDestToTun.Output()
-			if err != nil {
-				return err
+			// Add default route (0.0.0.0/0) with lower metric to override existing default route
+			defaultDst, _ := netlink.ParseIPNet("0.0.0.0/0")
+			defaultRoute := &netlink.Route{
+				LinkIndex: link.Attrs().Index,
+				Dst:       defaultDst,
+				Priority:  50,
 			}
 
-			routeSecondHalfOfAllDestToTun := exec.Command("sudo", "ip", "route", "add", "128.0.0.0/1", "dev", app.Config.TunName)
-			_, err = routeSecondHalfOfAllDestToTun.Output()
-			if err != nil {
-				return err
+			if err := netlink.RouteAdd(defaultRoute); err != nil {
+				return fmt.Errorf("failed to add default route with lower metric: %w", err)
 			}
 		} else {
-			routeTrafficToDestinationThroughTun := exec.Command("sudo", "ip", "route", "add", app.Config.DestinationAddress, "dev", app.Config.TunName)
-			_, err := routeTrafficToDestinationThroughTun.Output()
+			// Add route for specific destination through TUN
+			dst, err := netlink.ParseIPNet(app.Config.DestinationAddress)
 			if err != nil {
-				return err
+				return fmt.Errorf("invalid destination address %s: %w", app.Config.DestinationAddress, err)
+			}
+
+			route := &netlink.Route{
+				LinkIndex: link.Attrs().Index,
+				Dst:       dst,
+			}
+			if err := netlink.RouteAdd(route); err != nil {
+				return fmt.Errorf("failed to add route for %s: %w", app.Config.DestinationAddress, err)
 			}
 		}
 	} else {
-		routeReplyBackToClient := exec.Command("sudo", "ip", "route", "add",
-			utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/"),
-			"dev", app.Config.TunName)
-		_, err := routeReplyBackToClient.Output()
+		// Server mode: Add route to reply back to client
+		// Parse client IP without CIDR suffix
+		clientIP := utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/")
+
+		// Create a /32 network for the single IP
+		dst, err := netlink.ParseIPNet(clientIP + "/32")
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid client IP %s: %w", clientIP, err)
+		}
+
+		route := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       dst,
+		}
+		if err := netlink.RouteAdd(route); err != nil {
+			return fmt.Errorf("failed to add route for client %s: %w", clientIP, err)
 		}
 	}
+
 	return nil
 }
