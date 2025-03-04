@@ -140,12 +140,12 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		return fmt.Errorf("failed to convert public and private keys to hexadecimal: %w", err)
 	}
 
-	ipcRequest := fmt.Sprintf(`private_key=%s
-		listen_port=%s
-		public_key=%s
-		endpoint=%s:%d
-		allowed_ip=%s
-`,
+	ipcRequest := fmt.Sprintf(`
+private_key=%s
+listen_port=%s
+public_key=%s
+endpoint=%s:%d
+allowed_ip=%s`,
 		hexEncodedClientPrivateKey,
 		w.config.LocalAddress,
 		hexEncodedServerPublicKey,
