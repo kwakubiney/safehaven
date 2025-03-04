@@ -43,8 +43,12 @@ func (w *WireGuardVPN) Start() error {
 		return fmt.Errorf("failed to assign IP to TUN device: %w", err)
 	}
 
+	err = w.createRoutes()
+	if err != nil {
+		return fmt.Errorf("failed to create routes: %w", err)
+	}
+
 	if w.config.ServerMode {
-		//add routes to the kernel usng netlink
 
 		err = w.setupWireGuardServer(tunDevice)
 	} else {
