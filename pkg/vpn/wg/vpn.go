@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/kwakubiney/safehaven/pkg/vpn"
+	"github.com/kwakubiney/safehaven/utils"
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
@@ -43,6 +44,8 @@ func (w *WireGuardVPN) Start() error {
 	}
 
 	if w.config.ServerMode {
+		//add routes to the kernel usng netlink
+
 		err = w.setupWireGuardServer(tunDevice)
 	} else {
 		err = w.setupWireGuardClient(tunDevice)
@@ -233,4 +236,61 @@ func convertPublicAndPrivateKeyToHex(public string, private string) (string, str
 	}
 
 	return publicKeyHex, privateKeyHex, nil
+}
+
+func (w *WireGuardVPN) createRoutes() error {
+	// Get the TUN interface by name
+	link, err := netlink.LinkByName(w.config.TunName)
+	if err != nil {
+		return fmt.Errorf("failed to get TUN interface %s: %w", w.config.TunName, err)
+	}
+
+	if !w.config.ServerMode {
+		if w.config.Global {
+			// Add default route (0.0.0.0/0) with lower metric to override existing default route
+			defaultDst, _ := netlink.ParseIPNet("0.0.0.0/0")
+			defaultRoute := &netlink.Route{
+				LinkIndex: link.Attrs().Index,
+				Dst:       defaultDst,
+				Priority:  50,
+			}
+
+			if err := netlink.RouteAdd(defaultRoute); err != nil {
+				return fmt.Errorf("failed to add default route with lower metric: %w", err)
+			}
+		} else {
+			// Add route for specific destination through TUN
+			dst, err := netlink.ParseIPNet(w.config.DestinationAddress)
+			if err != nil {
+				return fmt.Errorf("invalid destination address %s: %w", w.config.DestinationAddress, err)
+			}
+
+			route := &netlink.Route{
+				LinkIndex: link.Attrs().Index,
+				Dst:       dst,
+			}
+			if err := netlink.RouteAdd(route); err != nil {
+				return fmt.Errorf("failed to add route for %s: %w", w.config.DestinationAddress, err)
+			}
+		}
+	} else {
+		// Server mode: Add route to reply back to client
+		// Parse client IP without CIDR suffix
+		clientIP := utils.RemoveCIDRSuffix(w.config.ClientTunIP, "/")
+
+		// Create a /32 network for the single IP
+		dst, err := netlink.ParseIPNet(clientIP + "/32")
+		if err != nil {
+			return fmt.Errorf("invalid client IP %s: %w", clientIP, err)
+		}
+
+		route := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       dst,
+		}
+		if err := netlink.RouteAdd(route); err != nil {
+			return fmt.Errorf("failed to add route for client %s: %w", clientIP, err)
+		}
+	}
+	return nil
 }
