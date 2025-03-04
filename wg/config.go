@@ -9,14 +9,14 @@ import (
 // WireGuardConfig represents the WireGuard configuration
 type WireGuardConfig struct {
 	ClientPrivateKey    string `json:"client_private_key"`
-	ServerPrivateKey    string `json:"server_private_key"`
 	ClientPublicKey     string `json:"client_public_key"`
-	ServerPublicKey     string `json:"server_public_key"`
 	ClientEndpoint      string `json:"client_endpoint"`
-	ServerEndpoint      string `json:"server_endpoint"`
 	ClientAllowedIPs    string `json:"client_allowed_ips"`
-	ServerAllowedIPs    string `json:"server_allowed_ips"`
 	ClientListenPort    int    `json:"client_listen_port"`
+	ServerPrivateKey    string `json:"server_private_key"`
+	ServerPublicKey     string `json:"server_public_key"`
+	ServerEndpoint      string `json:"server_endpoint"`
+	ServerAllowedIPs    string `json:"server_allowed_ips"`
 	ServerListenPort    int    `json:"server_listen_port"`
 	PersistentKeepalive int    `json:"persistent_keepalive"`
 }
