@@ -1,6 +1,8 @@
 package wg
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/kwakubiney/safehaven/pkg/vpn"
@@ -71,10 +73,14 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
 	w.wgDevice = wgDevice
 
+	hexEncodedClientPublicKey, hexEncodedServerPrivateKey, err :=
+		convertPublicAndPrivateKeyToHex(w.config.WireGuardConfig.ClientPublicKey,
+			w.config.WireGuardConfig.ServerPrivateKey)
+
 	ipcRequest := fmt.Sprintf(`private_key=%s
 listen_port=%d
 `,
-		w.config.WireGuardConfig.ServerPrivateKey,
+		hexEncodedServerPrivateKey,
 		w.config.LocalAddress,
 	)
 
@@ -85,7 +91,7 @@ public_key=%s
 allowed_ip=%s
 endpoint=%s
 `,
-			w.config.WireGuardConfig.ClientPublicKey,  // Client's public key
+			hexEncodedClientPublicKey,                 // Client's public key
 			w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client
 			w.config.ClientTunIP,
 		)
@@ -123,6 +129,14 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		return fmt.Errorf("invalid port: %w", err)
 	}
 
+	hexEncodedServerPublicKey, hexEncodedClientPrivateKey, err :=
+		convertPublicAndPrivateKeyToHex(w.config.WireGuardConfig.ServerPublicKey,
+			w.config.WireGuardConfig.ClientPrivateKey)
+
+	if err != nil {
+		return fmt.Errorf("failed to convert public and private keys to hexadecimal: %w", err)
+	}
+
 	ipcRequest := fmt.Sprintf(`private_key=%s
 		listen_port=%d
 		public_key=%s
@@ -130,9 +144,9 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		allowed_ip=%s
 		persistent_keepalive_interval=%d
 `,
-		w.config.WireGuardConfig.ClientPrivateKey,
+		hexEncodedClientPrivateKey,
 		w.config.LocalAddress,
-		w.config.WireGuardConfig.ServerPublicKey,
+		hexEncodedServerPublicKey,
 		host, port,
 		w.config.DestinationAddress,
 	)
@@ -187,4 +201,32 @@ func (w *WireGuardVPN) assignIPToTun() error {
 		}
 	}
 	return nil
+}
+
+func base64ToHex(base64Str string) (string, error) {
+	// Decode Base64 to bytes
+	data, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		return "", err
+	}
+
+	// Encode bytes to hexadecimal
+	hexStr := hex.EncodeToString(data)
+	return hexStr, nil
+}
+
+func convertPublicAndPrivateKeyToHex(public string, private string) (string, string, error) {
+	// Convert public key to hexadecimal
+	publicKeyHex, err := base64ToHex(public)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to convert public key to hexadecimal: %w", err)
+	}
+
+	// Convert private key to hexadecimal
+	privateKeyHex, err := base64ToHex(private)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to convert private key to hexadecimal: %w", err)
+	}
+
+	return publicKeyHex, privateKeyHex, nil
 }
