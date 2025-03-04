@@ -3,16 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/kwakubiney/safehaven/config"
 	"github.com/kwakubiney/safehaven/pkg/vpn"
 	"github.com/kwakubiney/safehaven/pkg/vpn/plain"
+	wg2 "github.com/kwakubiney/safehaven/pkg/vpn/wg"
+	"github.com/kwakubiney/safehaven/wg"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/kwakubiney/safehaven/config"
-	wg2 "github.com/kwakubiney/safehaven/pkg/vpn/wg"
-	"github.com/kwakubiney/safehaven/wg"
 )
 
 func setupConfig() (*config.Config, error) {
@@ -55,16 +54,23 @@ func main() {
 		vpnService = plain.NewPlainVPN(cfg)
 	}
 
-	// Setup graceful shutdown
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
+	// Setup signal handling
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan,
+		os.Interrupt,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGHUP,
+	)
 
-	go func() {
-		<-interruptChan
-		fmt.Println("\nShutting down gracefully...")
-		vpnService.Stop()
-		os.Exit(0)
-	}()
+	// Start VPN service
+	if err := vpnService.Start(); err != nil {
+		log.Fatalf("Failed to start VPN service: %v", err)
+	}
+
+	// Block and wait for signal
+	sig := <-signalChan
+	log.Printf("Received signal %v: initiating graceful shutdown", sig)
 
 	if err := vpnService.Start(); err != nil {
 		log.Fatal(err)
