@@ -144,7 +144,6 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		public_key=%s
 		endpoint=%s:%d
 		allowed_ip=%s
-		persistent_keepalive_interval=%d
 `,
 		hexEncodedClientPrivateKey,
 		w.config.LocalAddress,
