@@ -75,7 +75,7 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 listen_port=%d
 `,
 		w.config.WireGuardConfig.ServerPrivateKey,
-		w.config.WireGuardConfig.ServerListenPort,
+		w.config.LocalAddress,
 	)
 
 	// Add client configuration (if available)
@@ -131,11 +131,10 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		persistent_keepalive_interval=%d
 `,
 		w.config.WireGuardConfig.ClientPrivateKey,
-		w.config.WireGuardConfig.ClientListenPort,
+		w.config.LocalAddress,
 		w.config.WireGuardConfig.ServerPublicKey,
 		host, port,
-		w.config.WireGuardConfig.ClientAllowedIPs,
-		w.config.WireGuardConfig.PersistentKeepalive,
+		w.config.DestinationAddress,
 	)
 
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
