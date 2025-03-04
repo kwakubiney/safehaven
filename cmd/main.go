@@ -72,7 +72,7 @@ func main() {
 	sig := <-signalChan
 	log.Printf("Received signal %v: initiating graceful shutdown", sig)
 
-	if err := vpnService.Start(); err != nil {
+	if err := vpnService.Stop(); err != nil {
 		log.Fatal(err)
 	}
 }
