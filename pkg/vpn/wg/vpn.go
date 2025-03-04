@@ -78,7 +78,7 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 			w.config.WireGuardConfig.ServerPrivateKey)
 
 	ipcRequest := fmt.Sprintf(`private_key=%s
-listen_port=%d
+listen_port=%s
 `,
 		hexEncodedServerPrivateKey,
 		w.config.LocalAddress,
@@ -138,7 +138,7 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 	}
 
 	ipcRequest := fmt.Sprintf(`private_key=%s
-		listen_port=%d
+		listen_port=%s
 		public_key=%s
 		endpoint=%s:%d
 		allowed_ip=%s
