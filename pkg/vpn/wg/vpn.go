@@ -65,7 +65,7 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 	}
 	logger := device.NewLogger(
 		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", tunnelName),
+		fmt.Sprintf("(%s) ", "server "+tunnelName),
 	)
 
 	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
@@ -83,9 +83,11 @@ listen_port=%d
 		ipcRequest += fmt.Sprintf(`
 public_key=%s
 allowed_ip=%s
+endpoint=%s
 `,
-			w.config.WireGuardConfig.ServerPublicKey,  // Client's public key
+			w.config.WireGuardConfig.ClientPublicKey,  // Client's public key
 			w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client
+			w.config.ClientTunIP,
 		)
 	}
 
@@ -106,7 +108,7 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 
 	logger := device.NewLogger(
 		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", tunnelName),
+		fmt.Sprintf("(%s) ", "client "+tunnelName),
 	)
 
 	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
@@ -130,7 +132,7 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 `,
 		w.config.WireGuardConfig.ClientPrivateKey,
 		w.config.WireGuardConfig.ClientListenPort,
-		w.config.WireGuardConfig.ClientPublicKey,
+		w.config.WireGuardConfig.ServerPublicKey,
 		host, port,
 		w.config.WireGuardConfig.ClientAllowedIPs,
 		w.config.WireGuardConfig.PersistentKeepalive,
