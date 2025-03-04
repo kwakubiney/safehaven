@@ -78,7 +78,7 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 			w.config.WireGuardConfig.ServerPrivateKey)
 
 	ipcRequest := fmt.Sprintf(`private_key=%s
-listen_port=%s
+			listen_port=%s
 `,
 		hexEncodedServerPrivateKey,
 		w.config.LocalAddress,
@@ -96,6 +96,8 @@ endpoint=%s
 			w.config.ClientTunIP,
 		)
 	}
+
+	fmt.Println("IPC Request [server]: ", ipcRequest)
 
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard server: %w", err)
@@ -150,6 +152,8 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		host, port,
 		w.config.DestinationAddress,
 	)
+
+	fmt.Println("IPC Request [client]: ", ipcRequest)
 
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard client: %w", err)
