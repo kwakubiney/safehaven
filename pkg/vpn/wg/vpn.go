@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kwakubiney/safehaven/config"
 	"github.com/kwakubiney/safehaven/pkg/vpn"
+	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
@@ -27,29 +28,32 @@ func NewWireGuardVPN(config *config.Config) vpn.VPNService {
 }
 
 func (w *WireGuardVPN) Start() error {
-	// Create TUN device
 	tunDevice, err := tun.CreateTUN(w.config.TunName, 1500)
 	if err != nil {
 		return fmt.Errorf("failed to create TUN device: %w", err)
 	}
-	w.tunDevice = tunDevice // Store the TUN device in the struct
 
-	// Set up WireGuard based on server or client mode
+	w.tunDevice = tunDevice
+
+	err = w.assignIPToTun()
+	if err != nil {
+		return fmt.Errorf("failed to assign IP to TUN device: %w", err)
+	}
+
 	if w.config.ServerMode {
-		err = w.setupWireGuardServer(tunDevice) // Pass the TUN device
+		err = w.setupWireGuardServer(tunDevice)
 	} else {
-		err = w.setupWireGuardClient(tunDevice) // Pass the TUN device
+		err = w.setupWireGuardClient(tunDevice)
 	}
 	if err != nil {
 		tunDevice.Close()
 		return fmt.Errorf("failed to setup WireGuard: %w", err)
 	}
-
 	return nil
 }
 
 func (w *WireGuardVPN) Stop() error {
-	// Cleanup logic
+	w.tunDevice.Close()
 	return nil
 }
 
@@ -64,11 +68,9 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 		fmt.Sprintf("(%s) ", tunnelName),
 	)
 
-	// Create the device using the passed TUN device
 	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
 	w.wgDevice = wgDevice
 
-	// Set up the WireGuard device
 	ipcRequest := fmt.Sprintf(`private_key=%s
 listen_port=%d
 `,
@@ -97,7 +99,6 @@ allowed_ip=%s
 }
 
 func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
-	// Create a logger for the device
 	tunnelName, err := tunDevice.Name()
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel device name: %w", err)
@@ -108,11 +109,9 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		fmt.Sprintf("(%s) ", tunnelName),
 	)
 
-	// Create the device using the passed TUN device
 	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
 	w.wgDevice = wgDevice
 
-	// Convert the server's address string to host and port
 	host, portStr, err := net.SplitHostPort(w.config.ServerAddress)
 	if err != nil {
 		return fmt.Errorf("invalid server address format: %w", err)
@@ -122,7 +121,6 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		return fmt.Errorf("invalid port: %w", err)
 	}
 
-	// Set up the WireGuard device
 	ipcRequest := fmt.Sprintf(`private_key=%s
 		listen_port=%d
 		public_key=%s
@@ -142,5 +140,50 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		return fmt.Errorf("failed to configure WireGuard client: %w", err)
 	}
 	wgDevice.Up()
+	return nil
+}
+
+func (w *WireGuardVPN) assignIPToTun() error {
+	if !w.config.ServerMode {
+		tunLink, err := netlink.LinkByName(w.config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(w.config.ClientTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+	} else {
+		tunLink, err := netlink.LinkByName(w.config.TunName)
+		if err != nil {
+			return err
+		}
+
+		parsedTunIPAddress, err := netlink.ParseAddr(w.config.ServerTunIP)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.AddrAdd(tunLink, parsedTunIPAddress)
+		if err != nil {
+			return err
+		}
+
+		err = netlink.LinkSetUp(tunLink)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

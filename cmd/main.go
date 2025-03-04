@@ -27,13 +27,10 @@ func setupConfig() (*config.Config, error) {
 	flag.BoolVar(&cfg.Global, "g", false, "global")
 	flag.StringVar(&cfg.DestinationAddress, "d", "10.108.0.2", "destination host/network address")
 	flag.BoolVar(&cfg.ServerMode, "srv", false, "server mode")
-
-	// WireGuard config
 	wgConfigPath := flag.String("wg", "", "Path to WireGuard configuration file (JSON)")
 
 	flag.Parse()
 
-	// Optional WireGuard initialization
 	if *wgConfigPath != "" {
 		wgConfig, err := wg.LoadWireGuardConfig(*wgConfigPath)
 		if err != nil {
