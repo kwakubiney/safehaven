@@ -1,53 +1,67 @@
-package app
+package plain
 
 import (
 	"fmt"
+	"github.com/kwakubiney/safehaven/client"
+	"github.com/kwakubiney/safehaven/config"
+	"github.com/kwakubiney/safehaven/pkg/vpn"
+	"github.com/kwakubiney/safehaven/server"
+	"github.com/kwakubiney/safehaven/utils"
+	cmap "github.com/orcaman/concurrent-map/v2"
+	"github.com/songgao/water"
+	"github.com/vishvananda/netlink"
 	"log"
 	"net"
 	"strconv"
-
-	"github.com/kwakubiney/safehaven/client"
-	"github.com/kwakubiney/safehaven/config"
-	"github.com/kwakubiney/safehaven/server"
-	"github.com/kwakubiney/safehaven/utils"
-	"github.com/orcaman/concurrent-map/v2"
-	"github.com/vishvananda/netlink"
 )
 
-type App struct {
-	Config *config.Config
+type PlainVPN struct {
+	config    *config.Config
+	tunDevice *water.Interface
+	conn      net.Conn
 }
 
-func NewApp(config *config.Config) App {
-	return App{
-		Config: config,
+func NewPlainVPN(config *config.Config) vpn.VPNService {
+	return &PlainVPN{
+		config: config,
 	}
 }
 
-func (app *App) StartVPNClient() error {
-	vpnClient := client.NewClient(app.Config)
+func (p *PlainVPN) Start() error {
+	if p.config.ServerMode {
+		return p.startServer()
+	}
+	return p.startClient()
+}
+
+func (p *PlainVPN) Stop() error {
+	p.conn.Close()
+	p.tunDevice.Close()
+	return nil
+}
+
+func (p *PlainVPN) startClient() error {
+	vpnClient := client.NewClient(p.config)
 	err := vpnClient.SetTunOnDevice()
 	if err != nil {
 		return err
 	}
-	err = app.AssignIPToTun()
+	err = p.assignIPToTun()
 	if err != nil {
 		return err
 	}
 
-	err = app.CreateRoutes()
+	err = p.createRoutes()
 	if err != nil {
 		return err
 	}
 
 	packet := make([]byte, 65535)
-	clientConn, err := net.Dial("udp", app.Config.ServerAddress)
+	clientConn, err := net.Dial("udp", p.config.ServerAddress)
 
 	if err != nil {
 		return err
 	}
-	defer clientConn.Close()
-	defer vpnClient.TunInterface.Close()
 
 	//receive
 	go func() {
@@ -83,24 +97,24 @@ func (app *App) StartVPNClient() error {
 	return nil
 }
 
-func (app *App) StartVPNServer() error {
-	vpnServer := server.NewServer(app.Config)
+func (p *PlainVPN) startServer() error {
+	vpnServer := server.NewServer(p.config)
 	err := vpnServer.SetTunOnDevice()
 	if err != nil {
 		return err
 	}
 	vpnServer.ConnMap = cmap.New[net.Addr]()
-	err = app.AssignIPToTun()
+	err = p.assignIPToTun()
 	if err != nil {
 		return err
 	}
 
-	err = app.CreateRoutes()
+	err = p.createRoutes()
 	if err != nil {
 		return err
 	}
 
-	localAddress, _ := strconv.Atoi(app.Config.LocalAddress)
+	localAddress, _ := strconv.Atoi(p.config.LocalAddress)
 	serverConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: localAddress})
 	if err != nil {
 		return err
@@ -147,14 +161,14 @@ func (app *App) StartVPNServer() error {
 	return nil
 }
 
-func (app *App) AssignIPToTun() error {
-	if !app.Config.ServerMode {
-		tunLink, err := netlink.LinkByName(app.Config.TunName)
+func (p *PlainVPN) assignIPToTun() error {
+	if !p.config.ServerMode {
+		tunLink, err := netlink.LinkByName(p.config.TunName)
 		if err != nil {
 			return err
 		}
 
-		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ClientTunIP)
+		parsedTunIPAddress, err := netlink.ParseAddr(p.config.ClientTunIP)
 		if err != nil {
 			return err
 		}
@@ -169,12 +183,12 @@ func (app *App) AssignIPToTun() error {
 			return err
 		}
 	} else {
-		tunLink, err := netlink.LinkByName(app.Config.TunName)
+		tunLink, err := netlink.LinkByName(p.config.TunName)
 		if err != nil {
 			return err
 		}
 
-		parsedTunIPAddress, err := netlink.ParseAddr(app.Config.ServerTunIP)
+		parsedTunIPAddress, err := netlink.ParseAddr(p.config.ServerTunIP)
 		if err != nil {
 			return err
 		}
@@ -192,15 +206,15 @@ func (app *App) AssignIPToTun() error {
 	return nil
 }
 
-func (app *App) CreateRoutes() error {
+func (p *PlainVPN) createRoutes() error {
 	// Get the TUN interface by name
-	link, err := netlink.LinkByName(app.Config.TunName)
+	link, err := netlink.LinkByName(p.config.TunName)
 	if err != nil {
-		return fmt.Errorf("failed to get TUN interface %s: %w", app.Config.TunName, err)
+		return fmt.Errorf("failed to get TUN interface %s: %w", p.config.TunName, err)
 	}
 
-	if !app.Config.ServerMode {
-		if app.Config.Global {
+	if !p.config.ServerMode {
+		if p.config.Global {
 			// Add default route (0.0.0.0/0) with lower metric to override existing default route
 			defaultDst, _ := netlink.ParseIPNet("0.0.0.0/0")
 			defaultRoute := &netlink.Route{
@@ -214,9 +228,9 @@ func (app *App) CreateRoutes() error {
 			}
 		} else {
 			// Add route for specific destination through TUN
-			dst, err := netlink.ParseIPNet(app.Config.DestinationAddress)
+			dst, err := netlink.ParseIPNet(p.config.DestinationAddress)
 			if err != nil {
-				return fmt.Errorf("invalid destination address %s: %w", app.Config.DestinationAddress, err)
+				return fmt.Errorf("invalid destination address %s: %w", p.config.DestinationAddress, err)
 			}
 
 			route := &netlink.Route{
@@ -224,13 +238,13 @@ func (app *App) CreateRoutes() error {
 				Dst:       dst,
 			}
 			if err := netlink.RouteAdd(route); err != nil {
-				return fmt.Errorf("failed to add route for %s: %w", app.Config.DestinationAddress, err)
+				return fmt.Errorf("failed to add route for %s: %w", p.config.DestinationAddress, err)
 			}
 		}
 	} else {
 		// Server mode: Add route to reply back to client
 		// Parse client IP without CIDR suffix
-		clientIP := utils.RemoveCIDRSuffix(app.Config.ClientTunIP, "/")
+		clientIP := utils.RemoveCIDRSuffix(p.config.ClientTunIP, "/")
 
 		// Create a /32 network for the single IP
 		dst, err := netlink.ParseIPNet(clientIP + "/32")
