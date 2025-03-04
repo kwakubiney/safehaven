@@ -77,8 +77,9 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 		convertPublicAndPrivateKeyToHex(w.config.WireGuardConfig.ClientPublicKey,
 			w.config.WireGuardConfig.ServerPrivateKey)
 
-	ipcRequest := fmt.Sprintf(`private_key=%s
-			listen_port=%s
+	ipcRequest := fmt.Sprintf(`
+private_key=%s
+listen_port=%s
 `,
 		hexEncodedServerPrivateKey,
 		w.config.LocalAddress,
