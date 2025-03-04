@@ -111,13 +111,13 @@ endpoint=%s
 		return fmt.Errorf("failed to configure WireGuard server: %w", err)
 	}
 
+	wgDevice.Up()
+
 	get, err := wgDevice.IpcGet()
 	if err != nil {
 		return fmt.Errorf("failed to get WireGuard configuration: %w", err)
 	}
 	fmt.Println("IPC Get [server]: ", get)
-
-	wgDevice.Up()
 
 	return nil
 }
@@ -171,6 +171,7 @@ allowed_ip=%s`,
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard client: %w", err)
 	}
+	wgDevice.Up()
 
 	get, err := wgDevice.IpcGet()
 	if err != nil {
@@ -178,7 +179,6 @@ allowed_ip=%s`,
 	}
 	fmt.Println("IPC Get [client]: ", get)
 
-	wgDevice.Up()
 	return nil
 }
 
