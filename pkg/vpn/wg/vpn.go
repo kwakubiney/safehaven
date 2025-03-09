@@ -37,6 +37,7 @@ func (w *WireGuardVPN) Start() error {
 	}
 
 	w.tunDevice = tunDevice
+	w.tunDevice.Events()
 
 	err = w.assignIPToTun()
 	if err != nil {
@@ -49,7 +50,6 @@ func (w *WireGuardVPN) Start() error {
 	}
 
 	if w.config.ServerMode {
-
 		err = w.setupWireGuardServer(tunDevice)
 	} else {
 		err = w.setupWireGuardClient(tunDevice)
@@ -84,40 +84,28 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 		convertPublicAndPrivateKeyToHex(w.config.WireGuardConfig.ClientPublicKey,
 			w.config.WireGuardConfig.ServerPrivateKey)
 
-	ipcRequest := fmt.Sprintf(`
-private_key=%s
+	ipcRequest := fmt.Sprintf(`private_key=%s
 listen_port=%s
-`,
-		hexEncodedServerPrivateKey,
-		w.config.LocalAddress,
-	)
-
-	// Add client configuration (if available)
-	if w.config.WireGuardConfig.ServerAllowedIPs != "" {
-		ipcRequest += fmt.Sprintf(`
 public_key=%s
 allowed_ip=%s
 endpoint=%s
 `,
-			hexEncodedClientPublicKey,                 // Client's public key
-			w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client
-			w.config.ClientTunIP,
-		)
-	}
+		hexEncodedServerPrivateKey,
+		w.config.LocalAddress,
+		hexEncodedClientPublicKey,                 // Client's public key
+		w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client
+		w.config.ClientTunIP)
 
-	fmt.Println("IPC Request [server]: ", ipcRequest)
+	logger.Verbosef("IPC Request [server]: %s", ipcRequest)
 
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard server: %w", err)
 	}
 
-	wgDevice.Up()
-
-	get, err := wgDevice.IpcGet()
+	err = wgDevice.Up()
 	if err != nil {
-		return fmt.Errorf("failed to get WireGuard configuration: %w", err)
+		return fmt.Errorf("failed to bring up WireGuard server: %w", err)
 	}
-	fmt.Println("IPC Get [server]: ", get)
 
 	return nil
 }
@@ -153,8 +141,7 @@ func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
 		return fmt.Errorf("failed to convert public and private keys to hexadecimal: %w", err)
 	}
 
-	ipcRequest := fmt.Sprintf(`
-private_key=%s
+	ipcRequest := fmt.Sprintf(`private_key=%s
 listen_port=%s
 public_key=%s
 endpoint=%s:%d
@@ -171,13 +158,11 @@ allowed_ip=%s`,
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard client: %w", err)
 	}
-	wgDevice.Up()
 
-	get, err := wgDevice.IpcGet()
+	err = wgDevice.Up()
 	if err != nil {
-		return fmt.Errorf("failed to get WireGuard configuration: %w", err)
+		return fmt.Errorf("failed to bring up WireGuard client: %w", err)
 	}
-	fmt.Println("IPC Get [client]: ", get)
 
 	return nil
 }
