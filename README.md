@@ -69,7 +69,3 @@ The JSON configuration file should have the following structure:
    ```
 
 **NB**: Your server must know how to reach the private network, otherwise packets will be lost in transit.
-
----
-This update ensures that users understand how to use SafeHaven with WireGuard encryption for enhanced security.
-
