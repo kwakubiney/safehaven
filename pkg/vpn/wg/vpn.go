@@ -108,19 +108,9 @@ allowed_ip=%s
 		w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client)
 	)
 
-	logger.Verbosef("IPC Request [server]: %s", ipcRequest)
-
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard server: %w", err)
 	}
-
-	//get ipc
-	ipc, err := wgDevice.IpcGet()
-	if err != nil {
-		return fmt.Errorf("failed to get ipc: %w", err)
-	}
-	//log ipc
-	logger.Verbosef("IPC Response [server]: %s", ipc)
 
 	err = wgDevice.Up()
 	if err != nil {
@@ -172,8 +162,6 @@ allowed_ip=%s`,
 		w.config.DestinationAddress,
 	)
 
-	fmt.Println("IPC Request [client]: ", ipcRequest)
-
 	if err := wgDevice.IpcSet(ipcRequest); err != nil {
 		return fmt.Errorf("failed to configure WireGuard client: %w", err)
 	}
@@ -182,14 +170,6 @@ allowed_ip=%s`,
 	if err != nil {
 		return fmt.Errorf("failed to bring up WireGuard client: %w", err)
 	}
-
-	//get ipc
-	ipc, err := wgDevice.IpcGet()
-	if err != nil {
-		return fmt.Errorf("failed to get ipc: %w", err)
-	}
-	//log ipc
-	logger.Verbosef("IPC Response [client]: %s", ipc)
 
 	return nil
 }
