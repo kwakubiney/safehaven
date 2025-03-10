@@ -1,50 +1,101 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"github.com/kwakubiney/safehaven/config"
+	"github.com/kwakubiney/safehaven/pkg/vpn"
+	"github.com/kwakubiney/safehaven/pkg/vpn/plain"
+	wg2 "github.com/kwakubiney/safehaven/pkg/vpn/wg"
+	"github.com/kwakubiney/safehaven/wg"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/kwakubiney/safehaven/app"
-	"github.com/kwakubiney/safehaven/config"
+	"time"
 )
 
-func main() {
-	var config config.Config
-	flag.StringVar(&config.ClientTunIP, "tc", "192.168.1.100/24", "client tun device ip")
-	flag.StringVar(&config.ServerTunIP, "ts", "192.168.1.102/24", "server tun device ip")
-	flag.StringVar(&config.ServerAddress, "s", "138.197.32.138:3000", "server address")
-	flag.StringVar(&config.LocalAddress, "l", "3000", "local address")
-	flag.StringVar(&config.TunName, "tname", "tun0", "tun interface name")
-	flag.BoolVar(&config.Global, "g", false, "global")
-	flag.StringVar(&config.DestinationAddress, "d", "10.108.0.2", "destination host/network address")
-	flag.BoolVar(&config.ServerMode, "srv", false, "server mode")
+func setupConfig() (*config.Config, error) {
+	cfg := &config.Config{}
+
+	// Basic VPN flags
+	flag.StringVar(&cfg.ClientTunIP, "tc", "192.168.1.100/24", "client tun device ip")
+	flag.StringVar(&cfg.ServerTunIP, "ts", "192.168.1.102/24", "server tun device ip")
+	flag.StringVar(&cfg.ServerAddress, "s", "138.197.32.138:3000", "server address")
+	flag.StringVar(&cfg.LocalAddress, "l", "3000", "local address")
+	flag.StringVar(&cfg.TunName, "tname", "tun0", "tun interface name")
+	flag.BoolVar(&cfg.Global, "g", false, "global")
+	flag.StringVar(&cfg.DestinationAddress, "d", "10.108.0.2", "destination host/network address")
+	flag.BoolVar(&cfg.ServerMode, "srv", false, "server mode")
+	wgConfigPath := flag.String("wg", "", "Path to WireGuard configuration file (JSON)")
 
 	flag.Parse()
 
-	app := app.NewApp(&config)
+	if *wgConfigPath != "" {
+		wgConfig, err := wg.LoadWireGuardConfig(*wgConfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load wg config: %w", err)
+		}
+		cfg.WireGuardConfig = wgConfig
+	}
 
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
+	return cfg, nil
+}
+
+func main() {
+	cfg, err := setupConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var vpnService vpn.VPNService
+	if cfg.WireGuardConfig != nil {
+		vpnService = wg2.NewWireGuardVPN(cfg)
+	} else {
+		vpnService = plain.NewPlainVPN(cfg)
+	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGHUP,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		<-interruptChan
-		fmt.Println("\nShutting down gracefully...")
+		sig := <-signalChan
+		log.Printf("Received signal %v: initiating graceful shutdown", sig)
+
+		cancel()
+
+		stopDone := make(chan struct{})
+
+		go func() {
+			// Block additional signals during shutdown
+			signal.Stop(signalChan)
+
+			if err := vpnService.Stop(); err != nil {
+				log.Printf("Error during shutdown: %v", err)
+			}
+
+			close(stopDone)
+		}()
+
+		select {
+		case <-time.After(6 * time.Second):
+			log.Printf("Shutdown timed out")
+		case <-stopDone:
+			log.Printf("VPN service stopped successfully")
+		}
+
 		os.Exit(0)
 	}()
 
-	if !config.ServerMode {
-		err := app.StartVPNClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		err := app.StartVPNServer()
-		if err != nil {
-			log.Fatal(err)
-		}
+	// Start VPN service
+	if err := vpnService.Start(ctx); err != nil {
+		log.Fatalf("Failed to start VPN service: %v", err)
 	}
 }
