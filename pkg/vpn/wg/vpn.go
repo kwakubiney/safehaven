@@ -1,6 +1,7 @@
 package wg
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"log"
 	"net"
 	"strconv"
 )
@@ -25,16 +27,19 @@ type WireGuardVPN struct {
 }
 
 func NewWireGuardVPN(config *config.Config) vpn.VPNService {
+	log.Println("Initializing SafeHaven WireGuard VPN service...")
 	return &WireGuardVPN{
 		config: config,
 	}
 }
 
-func (w *WireGuardVPN) Start() error {
+func (w *WireGuardVPN) Start(ctx context.Context) error {
+	log.Println("Setting up WireGuard TUN device...")
 	tunDevice, err := tun.CreateTUN(w.config.TunName, 1500)
 	if err != nil {
 		return fmt.Errorf("failed to create TUN device: %w", err)
 	}
+	log.Printf("TUN device %s created successfully", w.config.TunName)
 
 	w.tunDevice = tunDevice
 	w.tunDevice.Events()
@@ -43,21 +48,29 @@ func (w *WireGuardVPN) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to assign IP to TUN device: %w", err)
 	}
+	log.Printf("TUN interface IP configured: %s", w.config.ServerMode)
 
 	err = w.createRoutes()
 	if err != nil {
 		return fmt.Errorf("failed to create routes: %w", err)
 	}
+	log.Println("Network routes configured successfully")
 
 	if w.config.ServerMode {
-		err = w.setupWireGuardServer(tunDevice)
+		log.Println("Starting VPN in server mode...")
+		err = w.setupWireGuardServer()
 	} else {
-		err = w.setupWireGuardClient(tunDevice)
+		log.Println("Starting VPN in client mode...")
+		err = w.setupWireGuardClient()
 	}
 	if err != nil {
 		tunDevice.Close()
 		return fmt.Errorf("failed to setup WireGuard: %w", err)
 	}
+	log.Println("SafeHaven VPN started successfully")
+	// Wait for context cancellation to initiate shutdown
+	<-ctx.Done()
+	log.Println("Context cancelled, initiating WireGuard VPN shutdown...")
 	return nil
 }
 
@@ -66,9 +79,9 @@ func (w *WireGuardVPN) Stop() error {
 	return nil
 }
 
-func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
+func (w *WireGuardVPN) setupWireGuardServer() error {
 
-	tunnelName, err := tunDevice.Name()
+	tunnelName, err := w.tunDevice.Name()
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel device name: %w", err)
 	}
@@ -77,7 +90,7 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 		fmt.Sprintf("(%s) ", "server "+tunnelName),
 	)
 
-	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
+	wgDevice := device.NewDevice(w.tunDevice, conn.NewDefaultBind(), logger)
 	w.wgDevice = wgDevice
 
 	hexEncodedClientPublicKey, hexEncodedServerPrivateKey, err :=
@@ -88,13 +101,12 @@ func (w *WireGuardVPN) setupWireGuardServer(tunDevice tun.Device) error {
 listen_port=%s
 public_key=%s
 allowed_ip=%s
-endpoint=%s
 `,
 		hexEncodedServerPrivateKey,
 		w.config.LocalAddress,
 		hexEncodedClientPublicKey,                 // Client's public key
-		w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client
-		w.config.ClientTunIP)
+		w.config.WireGuardConfig.ServerAllowedIPs, // Allowed IPs for the client)
+	)
 
 	logger.Verbosef("IPC Request [server]: %s", ipcRequest)
 
@@ -102,26 +114,33 @@ endpoint=%s
 		return fmt.Errorf("failed to configure WireGuard server: %w", err)
 	}
 
+	//get ipc
+	ipc, err := wgDevice.IpcGet()
+	if err != nil {
+		return fmt.Errorf("failed to get ipc: %w", err)
+	}
+	//log ipc
+	logger.Verbosef("IPC Response [server]: %s", ipc)
+
 	err = wgDevice.Up()
 	if err != nil {
 		return fmt.Errorf("failed to bring up WireGuard server: %w", err)
 	}
-
 	return nil
 }
 
-func (w *WireGuardVPN) setupWireGuardClient(tunDevice tun.Device) error {
-	tunnelName, err := tunDevice.Name()
+func (w *WireGuardVPN) setupWireGuardClient() error {
+	tunDeviceName, err := w.tunDevice.Name()
 	if err != nil {
 		return fmt.Errorf("failed to get tunnel device name: %w", err)
 	}
 
 	logger := device.NewLogger(
 		device.LogLevelVerbose,
-		fmt.Sprintf("(%s) ", "client "+tunnelName),
+		fmt.Sprintf("(%s) ", "client "+tunDeviceName),
 	)
 
-	wgDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
+	wgDevice := device.NewDevice(w.tunDevice, conn.NewDefaultBind(), logger)
 	w.wgDevice = wgDevice
 
 	host, portStr, err := net.SplitHostPort(w.config.ServerAddress)
@@ -163,6 +182,14 @@ allowed_ip=%s`,
 	if err != nil {
 		return fmt.Errorf("failed to bring up WireGuard client: %w", err)
 	}
+
+	//get ipc
+	ipc, err := wgDevice.IpcGet()
+	if err != nil {
+		return fmt.Errorf("failed to get ipc: %w", err)
+	}
+	//log ipc
+	logger.Verbosef("IPC Response [client]: %s", ipc)
 
 	return nil
 }

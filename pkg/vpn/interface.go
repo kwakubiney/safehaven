@@ -1,11 +1,8 @@
 package vpn
 
-type VPNService interface {
-	Start() error
-	Stop() error
-}
+import "context"
 
-type VPNConfig interface {
-	GetTunName() string
-	IsServerMode() bool
+type VPNService interface {
+	Start(ctx context.Context) error
+	Stop() error
 }
