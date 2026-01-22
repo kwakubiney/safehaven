@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/kwakubiney/safehaven/config"
-	"github.com/kwakubiney/safehaven/pkg/vpn"
-	"github.com/kwakubiney/safehaven/pkg/vpn/plain"
 	wg2 "github.com/kwakubiney/safehaven/pkg/vpn/wg"
 	"github.com/kwakubiney/safehaven/wg"
 	"log"
@@ -49,12 +47,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var vpnService vpn.VPNService
-	if cfg.WireGuardConfig != nil {
-		vpnService = wg2.NewWireGuardVPN(cfg)
-	} else {
-		vpnService = plain.NewPlainVPN(cfg)
+	if cfg.WireGuardConfig == nil {
+		log.Fatal("WireGuard configuration is required. Please provide the -wg flag with a path to the config file.")
 	}
+
+	vpnService := wg2.NewWireGuardVPN(cfg)
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan,
