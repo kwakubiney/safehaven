@@ -35,7 +35,7 @@ func NewWireGuardVPN(config *config.Config) vpn.VPNService {
 
 func (w *WireGuardVPN) Start(ctx context.Context) error {
 	log.Println("Setting up WireGuard TUN device...")
-	tunDevice, err := tun.CreateTUN(w.config.TunName, 1500)
+	tunDevice, err := tun.CreateTUN(w.config.TunName, w.config.TunMTU)
 	if err != nil {
 		return fmt.Errorf("failed to create TUN device: %w", err)
 	}

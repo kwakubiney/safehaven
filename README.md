@@ -29,6 +29,8 @@ Usage:
         client tun device ip (default "192.168.1.100/24")
   -tname string
         tunname (default "tun0")
+  -mtu int
+        tun interface MTU (default 1500)
   -ts string
         server tun device ip (default "192.168.1.102/24")
   -wg string

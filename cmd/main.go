@@ -23,6 +23,7 @@ func setupConfig() (*config.Config, error) {
 	flag.StringVar(&cfg.ServerAddress, "s", "138.197.32.138:3000", "server address")
 	flag.StringVar(&cfg.LocalAddress, "l", "3000", "local address")
 	flag.StringVar(&cfg.TunName, "tname", "tun0", "tun interface name")
+	flag.IntVar(&cfg.TunMTU, "mtu", 1500, "tun interface MTU")
 	flag.BoolVar(&cfg.Global, "g", false, "global")
 	flag.StringVar(&cfg.DestinationAddress, "d", "10.108.0.2", "destination host/network address")
 	flag.BoolVar(&cfg.ServerMode, "srv", false, "server mode")

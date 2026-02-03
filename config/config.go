@@ -7,6 +7,7 @@ type Config struct {
 	ServerAddress      string
 	ServerPort         string
 	TunName            string
+	TunMTU             int
 	ServerTunIP        string
 	LocalAddress       string
 	DestinationAddress string
